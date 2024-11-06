@@ -1,0 +1,60 @@
+password="" # enter password here
+sgdisk -o /dev/nvme0n1
+sgdisk -n 1:0:+1G -t 1:EF00 /dev/nvme0n1
+sgdisk -n 2:0:+128M -t 2:8300 /dev/nvme0n1
+sgdisk -n 3:0:0 -t 3:8300 /dev/nvme0n1
+mkfs.fat -F32 /dev/nvme0n1p1
+mkfs.ext4 -F /dev/nvme0n1p2
+echo -n "$password" | cryptsetup luksFormat /dev/nvme0n1p3 --key-file - --batch-mode
+echo -n "$password" | cryptsetup open /dev/nvme0n1p3 cryptroot --key-file -
+mkfs.btrfs /dev/mapper/cryptroot
+mkdir -v /mnt/temp
+mount /dev/mapper/cryptroot /mnt/temp
+btrfs subvolume create /mnt/temp/@
+btrfs subvolume create /mnt/temp/@home
+umount /mnt/temp
+mount -o subvol=@ /dev/mapper/cryptroot /mnt/gentoo
+mkdir /mnt/gentoo/home
+mount -o subvol=@home /dev/mapper/cryptroot /mnt/gentoo/home
+mkdir /mnt/gentoo/boot
+mount /dev/nvme0n1p1 /mnt/gentoo/boot
+mkdir /mnt/gentoo/tpm
+mount /dev/nvme0n1p2 /mnt/gentoo/tpm
+cd /mnt/gentoo
+curl https://mirror.leaseweb.com/gentoo/releases/amd64/autobuilds/latest-stage3.txt -o latest-stage3.txt
+URL="https://mirror.leaseweb.com/gentoo/releases/amd64/autobuilds/$(cat latest-stage3.txt | grep stage3-amd64-systemd | grep -o '.*[^0-9]')"
+curl -o stage3-amd64-systemd.tar.xz $(echo $URL)
+tar xpvf stage3-*.tar.xz --xattrs-include='*.*' --numeric-owner
+cp -L /etc/resolv.conf /mnt/gentoo/etc/
+cp /etc/wpa.conf /mnt/gentoo/etc/
+
+UUID_BOOT=$(blkid -s UUID -o value /dev/nvme0n1p1)
+UUID_TPM=$(blkid -s UUID -o value /dev/nvme0n1p2)
+UUID_ROOT=$(blkid -s UUID -o value /dev/nvme0n1p3)
+
+> /mnt/gentoo/etc/fstab
+echo "UUID=${UUID_BOOT}           /boot   vfat    defaults,noatime               0 2" | tee -a /mnt/gentoo/etc/fstab
+echo "UUID=${UUID_ROOT}           /       btrfs   defaults,noatime,subvol=@      0 1" | tee -a /mnt/gentoo/etc/fstab
+echo "UUID=${UUID_ROOT}           /home   btrfs   defaults,noatime,subvol=@home  0 2" | tee -a /mnt/gentoo/etc/fstab
+echo "UUID=${UUID_TPM}            /tpm    ext4    defaults,noatime               0 2" | tee -a /mnt/gentoo/etc/fstab
+
+mkdir -p -v /mnt/gentoo/etc/portage/repos.conf
+cp /mnt/gentoo/usr/share/portage/config/repos.conf /mnt/gentoo/etc/portage/repos.conf/gentoo.conf
+mount --types proc /proc /mnt/gentoo/proc
+mount --rbind /sys /mnt/gentoo/sys
+mount --make-rslave /mnt/gentoo/sys
+mount --rbind /dev /mnt/gentoo/dev
+mount --make-rslave /mnt/gentoo/dev
+mount --bind /run /mnt/gentoo/run
+chroot /mnt/gentoo /bin/bash
+. /etc/profile
+export PS1="(chroot) $PS1"
+
+emerge --sync
+eselect news read
+emerge --oneshot portage
+echo "Europe/Warsaw" > /etc/timezone
+echo "pl_PL ISO-8859-2" | tee -a /etc/locale.gen
+echo "pl_PL.UTF-8 UTF-8" | tee -a /etc/locale.gen
+locale-gen && env-update && source /etc/profile
+emerge app-portage/cpuid2cpuflags app-misc/resolve-march-native
