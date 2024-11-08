@@ -1,0 +1,2 @@
+sys-boot/uefi-mkconfig ~amd64
+app-emulation/virt-firmware ~amd64
