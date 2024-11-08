@@ -1,0 +1,4 @@
+UUID=CD3A-D387           /boot   vfat    defaults,noatime               0 2
+UUID=a6373853-c657-4cac-9ef6-5dc7e1f68d30           /       btrfs   rootflags=rw,relatime,compress=zstd:3,ssd,subvol=@      0 1
+UUID=a6373853-c657-4cac-9ef6-5dc7e1f68d30           /home   btrfs   defaults,relatime,compress=zstd:3,ssd,subvol=@home  0 2
+UUID=3da89ac0-7042-407b-82ed-f4100cd1e478           /tpm    ext4    d:efaults,noatime               0 2
