@@ -1,1 +1,1 @@
-sys-kernel/installkernel dracut grub systemd
+sys-kernel/installkernel dracut ukify uki
