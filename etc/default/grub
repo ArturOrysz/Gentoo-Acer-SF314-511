@@ -26,10 +26,10 @@ GRUB_DISTRIBUTOR="Gentoo"
 # GRUB_CMDLINE_LINUX="net.ifnames=0"
 #
 # Boot with systemd instead of sysvinit (openrc)
- GRUB_CMDLINE_LINUX="init=/usr/lib/systemd/systemd"
+GRUB_CMDLINE_LINUX="init=/usr/lib/systemd/systemd"
 
 # Append parameters to the linux kernel command line for non-recovery entries
-GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
+# GRUB_CMDLINE_LINUX_DEFAULT="rd.debug systemd.debug-shell rd.break=pre-mount" #rd.break=pre-mount #initqueue
 
 # Uncomment to disable graphical terminal (grub-pc only)
 #GRUB_TERMINAL=console
@@ -37,23 +37,23 @@ GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
 # Resolution used on graphical terminal.
 # The list of valid modes may be obtained using the 'vbeinfo' (PC BIOS) or
 # 'videoinfo' (EFI) command from a GRUB boot prompt.
-GRUB_GFXMODE=1366x768x24
+#GRUB_GFXMODE=640x480
 
 # Set to 'text' to force the Linux kernel to boot in normal text
 # mode, 'keep' to preserve the graphics mode set using
 # 'GRUB_GFXMODE', 'WIDTHxHEIGHT'['xDEPTH'] to set a particular
 # graphics mode, or a sequence of these separated by commas or
 # semicolons to try several modes in sequence.
-GRUB_GFXPAYLOAD_LINUX=keep
+#GRUB_GFXPAYLOAD_LINUX=
 
 # Path to theme spec txt file.
 # The starfield is by default provided with use truetype.
 # NOTE: when enabling custom theme, ensure you have required font/etc.
-GRUB_THEME="/boot/grub/themes/gentoo_minimalist/theme.txt"
+#GRUB_THEME="/boot/grub/themes/starfield/theme.txt"
 
 # Background image used on graphical terminal.
 # Can be in various bitmap formats.
-# GRUB_BACKGROUND="/boot/grub/mybackground.png"
+#GRUB_BACKGROUND="/boot/grub/mybackground.png"
 
 # Uncomment if you don't want GRUB to pass "root=UUID=xxx" parameter to kernel
 #GRUB_DISABLE_LINUX_UUID=true

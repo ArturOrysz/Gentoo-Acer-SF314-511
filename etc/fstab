@@ -1,4 +1,7 @@
-UUID=CD3A-D387           			/boot	vfat	defaults,noatime					0 2
-UUID=a6373853-c657-4cac-9ef6-5dc7e1f68d30	/	btrfs	rootflags=rw,relatime,compress=zstd:3,ssd,subvol=@	0 1
-UUID=a6373853-c657-4cac-9ef6-5dc7e1f68d30	/home	btrfs	defaults,relatime,compress=zstd:3,ssd,subvol=@home	0 2
-UUID=3da89ac0-7042-407b-82ed-f4100cd1e478	/tpm	ext4	defaults,noatime					0 2
+# <fs>      <mountpoint>    <type>  <opts>                                              <dump/pass>
+shm						/dev/shm        tmpfs   nodev,nosuid,noexec				0 0
+UUID=CC23-3809                                  /boot   vfat    defaults,noatime                        	          0 2
+UUID=f513155f-05a7-4029-95cc-7c0596258124       /       btrfs   rw,relatime,compress=zstd:3,autodefrag,subvol=@           0 1
+UUID=f513155f-05a7-4029-95cc-7c0596258124       /home   btrfs   rw,relatime,compress=zstd:3,autodefrag,subvol=@home       0 2
+UUID=3da89ac0-7042-407b-82ed-f4100cd1e478       /tpm    ext4    defaults,noatime                                  0 2
+
