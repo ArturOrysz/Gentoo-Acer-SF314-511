@@ -1,0 +1,218 @@
+password="password"
+sgdisk -o /dev/nvme0n1
+sgdisk -n 1:0:+1G -t 1:EF00 /dev/nvme0n1
+sgdisk -n 2:0:+128M -t 2:8300 /dev/nvme0n1
+sgdisk -n 3:0:0 -t 3:8300 /dev/nvme0n1
+mkfs.fat -F32 /dev/nvme0n1p1
+mkfs.ext4 -F /dev/nvme0n1p2
+echo -n "$password" | cryptsetup luksFormat /dev/nvme0n1p3 --key-file - --batch-mode
+echo -n "$password" | cryptsetup open /dev/nvme0n1p3 cryptroot --key-file -
+mkfs.btrfs /dev/mapper/cryptroot
+mkdir /mnt/temp
+mount /dev/mapper/cryptroot /mnt/temp
+btrfs subvolume create /mnt/temp/@
+btrfs subvolume create /mnt/temp/@home
+umount /mnt/temp
+mount -o subvol=@ /dev/mapper/cryptroot /mnt/gentoo
+mkdir /mnt/gentoo/home
+mount -o subvol=@home /dev/mapper/cryptroot /mnt/gentoo/home
+mkdir /mnt/gentoo/boot
+mount /dev/nvme0n1p1 /mnt/gentoo/boot
+mkdir /mnt/gentoo/tpm
+mount /dev/nvme0n1p2 /mnt/gentoo/tpm
+cd /mnt/gentoo
+curl https://mirror.leaseweb.com/gentoo/releases/amd64/autobuilds/latest-stage3.txt -o latest-stage3.txt
+URL="https://mirror.leaseweb.com/gentoo/releases/amd64/autobuilds/$(cat latest-stage3.txt | grep stage3-amd64-systemd | grep -o '.*[^0-9]')"
+curl -o stage3-amd64-systemd.tar.xz $(echo $URL)
+tar xpvf stage3-*.tar.xz --xattrs-include='*.*' --numeric-owner
+rm -rf latest-stage3.txt stage3-amd64-systemd.tar.xz
+cp -L /etc/resolv.conf /mnt/gentoo/etc/
+cp /etc/wpa.conf /mnt/gentoo/etc/
+UUID_BOOT=$(blkid -s UUID -o value /dev/nvme0n1p1)
+UUID_TPM=$(blkid -s UUID -o value /dev/nvme0n1p2)
+UUID_ROOT=$(blkid -s UUID -o value /dev/nvme0n1p3)
+UUID_CRYPT=$(blkid -s UUID -o value /dev/mapper/cryptroot)
+> /mnt/gentoo/etc/fstab
+echo "UUID=${UUID_BOOT}           /boot   vfat    defaults,noatime,ro,nosuid,nodev,noexec 0 1               0 1" | tee -a /mnt/gentoo/etc/fstab
+echo "UUID=${UUID_CRYPT}           /      btrfs	  rw,relatime,compress=zstd:3,autodefrag,space_cache=v2,subvol=@ 0 1" | tee -a /mnt/gentoo/etc/fstab
+echo "UUID=${UUID_CRYPT}           /home   btrfs   rw,relatime,compress=zstd:3,autodefrag,space_cache=v2,subvol=@home  0 2" | tee -a /mnt/gentoo/etc/fstab
+echo "UUID=${UUID_TPM}            /tpm    ext4    defaults,noatime               0 2" | tee -a /mnt/gentoo/etc/fstab
+mkdir -p /mnt/gentoo/etc/portage/repos.conf
+cp /mnt/gentoo/usr/share/portage/config/repos.conf /mnt/gentoo/etc/portage/repos.conf/gentoo.conf
+mount --types proc /proc /mnt/gentoo/proc
+mount --rbind /sys /mnt/gentoo/sys
+mount --make-rslave /mnt/gentoo/sys
+mount --rbind /dev /mnt/gentoo/dev
+mount --make-rslave /mnt/gentoo/dev
+mount --bind /run /mnt/gentoo/run
+mount UUID=601aa0ba-d7d5-4b2c-a8c4-bc9654a288b8 /mnt/gentoo/var/cache/binpkgs
+chroot /mnt/gentoo /bin/bash
+
+
+source /etc/profile
+env-update n
+export PS1="(chroot) $PS1"
+clear
+emerge --sync
+eselect news read
+emerge --oneshot portage
+echo "Europe/Warsaw" > /etc/timezone
+echo "pl_PL ISO-8859-2" | tee -a /etc/locale.gen
+echo "pl_PL.UTF-8 UTF-8" | tee -a /etc/locale.gen
+locale-gen && env-update && source /etc/profile
+emerge app-portage/cpuid2cpuflags app-misc/resolve-march-native emerge dev-vcs/git app-eselect/eselect-repository
+
+
+sed -i "s/^COMMON_FLAGS=.*/COMMON_FLAGS=\"-O2 -pipe $(resolve-march-native)\"/" /etc/portage/make.conf
+echo 'MAKEOPTS="-j5"' | tee -a /etc/portage/make.conf
+echo 'FEATURES="candy nodoc noinfo noman parallel-install buildpkg binpkg-multi-instance"' >> /etc/portage/make.conf
+echo 'EMERGE_DEFAULT_OPTS="--quiet --ask --verbose --columns --quiet-build=y"' >> /etc/portage/make.conf
+echo 'ACCEPT_LICENSE="*"' >> /etc/portage/make.conf
+echo 'VIDEO_CARDS="intel' >> /etc/portage/make.conf
+mkdir -p -v /etc/portage/package.use
+touch /etc/portage/package.use/zzz_via_autounmask
+mkdir -p /etc/portage/repos.conf
+eselect repository enable guru
+emerge --sync guru
+mkdir -p /etc/portage/package.unmask
+mkdir -p /etc/portage/package.use
+mkdir -p /etc/portage/package.accept_keywords
+echo "*/* $(cpuid2cpuflags)" > /etc/portage/package.use/00cpu-flags
+echo "app-crypt/clevis" >> /etc/portage/package.unmask/guru.conf
+echo "app-crypt/clevis ~amd64" >> /etc/portage/package.accept_keywords/guru.conf
+echo "dev-libs/jose ~amd64" >> /etc/portage/package.accept_keywords/guru.conf
+echo "dev-libs/luksmeta ~amd64" >> /etc/portage/package.accept_keywords/guru.conf
+echo "sys-boot/uefi-mkconfig ~amd64" >> /etc/portage/package.accept_keywords/systemd
+echo "app-emulation/virt-firmware ~amd64" >> /etc/portage/package.accept_keywords/systemd
+echo "sys-kernel/gentoo-sources ~amd64" > /etc/portage/package.accept_keywords/gentoo-sources
+echo "sys-kernel/linux-firmware ~amd64" > /etc/portage/package.accept_keywords/firmware
+echo "sys-firmware/intel-microcode ~amd64" >> /etc/portage/package.accept_keywords/firmware
+echo "sys-firmware/sof-firmware ~amd64" >> /etc/portage/package.accept_keywords/firmware
+echo "dev-util/github-cli ~amd64" > /etc/portage/package.accept_keywords/github-cli
+#echo "sys-kernel/dracut-crypt-ssh ~amd64" > /etc/portage/package.accept_keywords/dracut-crypt-ssh
+#echo "app-crypt/tpm2-pkcs11 ~amd64" > /etc/portage/package.accept_keywords/tpm2-pkcs11
+#echo "dev-python/tpm2-pytss ~amd64" >> /etc/portage/package.accept_keywords/tpm2-pkcs11
+#echo "app-crypt/tpm2-pkcs11 ~amd64" > /etc/portage/package.accept_keywords/dracut
+echo "sys-firmware/intel-microcode initramfs -hostonly" > /etc/portage/package.use/intel-microcode
+echo "sys-apps/systemd acl cryptsetup -pkcs11 boot ukify dns-over-tls gcrypt kernel-install pam seccomp secureboot tpm zstd" > /etc/portage/package.use/systemd
+echo "sys-fs/cryptsetup argon2 openssl udev -kernel -static -fips" >> /etc/portage/package.use/systemd
+echo "net-misc/networkmanager dhcpcd resolvconf -ppp -gtk-doc -wext" >> /etc/portage/package.use/systemd
+echo "sys-apps/systemd-utils kernel-install boot " >> /etc/portage/package.use/systemd
+echo "sys-kernel/installkernel dracut systemd-boot" >> /etc/portage/package.use/systemd
+echo "sys-kernel/linux-firmware -initramfs" > /etc/portage/package.use/linux-firmware
+echo "sys-fs/lvm2 lvm" > /etc/portage/package.use/lvm2
+echo "x11-libs/pango X" > etc/portage/package.use/plymouth
+echo "x11-libs/cairo X" >>  etc/portage/package.use/plymouth
+echo "media-libs/libglvnd X" >> etc/portage/package.use/plymouth
+echo "app-admin/doas persist" >> /etc/portage/package.use/doas
+echo "net-wireless/wpa_supplicant dbus" >> /etc/portage/package.use/systemd
+echo "app-alternatives/cpio -libarchive" > /etc/portage/package.use/cpio
+echo "app-portage/pfl network-cron" > /etc/portage/package.use/pfl
+echo "sys-apps/util-linux caps" > /etc/portage/package.use/util-linux
+FEATURES="-collision-protect" emerge --ask=n app-alternatives/cpio
+emerge --ask=n app-portage/gentoolkit app-portage/portage-utils sys-kernel/gentoo-sources sys-kernel/linux-firmware sys-firmware/intel-microcode sys-firmware/sof-firmware
+eselect kernel set 1
+mkdir -p /usr/share/keyrings/
+openssl req -new -x509 -newkey rsa:2048 -keyout /usr/share/keyrings/gentoo_secure_boot.key -out /usr/share/keyrings/gentoo_secure_boot.crt -days 3650 -nodes -subj "/CN=Gentoo Secure Boot/"
+openssl x509 -in /usr/share/keyrings/gentoo_secure_boot.crt -outform DER -out /usr/share/keyrings/gentoo_secure_boot.der
+echo 'SECUREBOOT_SIGN_KEY="/usr/share/keyrings/gentoo_secure_boot.key"' >> /etc/portage/make.conf
+echo 'SECUREBOOT_SIGN_CERT="/usr/share/keyrings/gentoo_secure_boot.crt"' >> /etc/portage/make.conf
+echo 'VIDEO_CARDS="intel"' >> /etc/portage/make.conf
+echo 'FEATURES="binpkg-multi-instance buildpkg candy nodoc noinfo noman parallel-install"' >> /etc/portage/make.conf
+echo 'USE="X bluetooth dbus gpl libplacebo libv4l opengl pulseaudio v4l vaapi wayland x265 zsh-completion"' >> /etc/portage/make.conf
+echo 'L10N="pl"' >> /etc/portage/make.conf
+git clone https://github.com/ArturOrysz/Gentoo-Acer-SF314-511.git
+cp Gentoo-Acer-SF314-511/usr/src/linux/kernel-conf /usr/src/linux/.config
+cd /usr/src/linux
+yes "" | make oldconfig && make -j$(nproc) && make modules_install
+emerge --ask=n sys-boot/efibootmgr sys-fs/btrfs-progs sys-kernel/installkernel sys-kernel/dracut sys-fs/cryptsetup app-text/tree app-portage/gentoolkit app-portage/pfl app-portage/eix net-wireless/bluez sys-apps/biosdevname sys-apps/rng-tools app-crypt/clevis app-crypt/tpm2-tools app-crypt/tpm2-tss sys-kernel/installkernel sys-boot/mokutil app-crypt/efitools app-crypt/sbsigntools net-misc/dhcpcd net-wireless/wpa_supplicant net-misc/networkmanager sys-boot/plymouth app-admin/doas sys-kernel/dracut-crypt-ssh sys-apps/busybox sys-fs/dosfstools app-admin/eclean-kernel app-shells/zsh app-shells/zsh-completions app-shells/gentoo-zsh-completions sys-apps/usbutils sys-apps/lm-sensors dev-util/github-cli
+
+ln -s /lib/systemd/system/wpa_supplicant@.service wpa_supplicant@wlp0s20f3.service
+systemctl enable wpa_supplicant@wlp0s20f3
+systemctl enable --now systemd-networkd
+systemctl enable --now systemd-resolved
+ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+plymouth-set-default-theme fade-in
+openssl x509 -inform DER -in /usr/share/keyrings/gentoo_secure_boot.der -out /usr/share/keyrings/gentoo_secure_boot.pem
+mkdir /etc/dracut.conf.d/
+echo 'omit_dracutmodules+= " network "' > /etc/dracut.conf.d/network
+#echo 'early_microcode="yes"' > /etc/dracut.conf.d/microcode.conf
+
+make install
+
+UUID_ROOT=$(blkid -s UUID -o value /dev/nvme0n1p3)
+
+rd.luks.name= 92154e07-d962-475c-9777-b66dfda42b32=cryptroot root=/dev/mapper/cryptroot rootflags=subvol=@ init=/lib/systemd/systemd rd.luks.uuid=92154e07-d962-475c-9777-b66dfda42b32 rd.luks.options=discard rd.debug clevis.luks.debug=1 loglevel=7
+
+rd.luks.name=92154e07-d962-475c-9777-b66dfda42b32=cryptroot root=/dev/mapper/cryptroot rootflags=subvol=@ init=/lib/systemd/systemd rd.luks.uuid=92154e07-d962-475c-9777-b66dfda42b32 rd.luks.options=discard quiet splash vt.global_cursor_default=0 vconsole.keymap=pl vconsole.font=lat2-16
+
+mokutil --import /usr/share/keyrings/gentoo_secure_boot.der
+
+tpm2_clear
+tpm2_getcap properties-variable
+echo -n "$password" | clevis luks bind -d /dev/nvme0n1p3 tpm2 '{}' --key-file -
+UUID_ROOT=$(blkid -s UUID -o value /dev/nvme0n1p3)
+echo "cryptroot UUID=${UUID_ROOT} none luks" > /etc/crypttab
+
+###
+btrfs subvolume create /home/artur
+mkdir -p /home/artur/.ssh/
+echo "/usr/bin/fish" | sudo tee -a /etc/shells
+useradd -M -d /home/artur -p artur -G users,wheel,audio --btrfs-subvolume-home -s /usr/bin/fish artur
+chown artur:artur -R /home/artur
+echo "permit keepenv nopass :wheel" > /etc/doas.conf
+echo "permit keepenv nopass artur" >> /etc/doas.conf
+echo "permit keepenv nopass :root" >> /etc/doas.conf
+ssh-keygen -t rsa -b 4096 -f /home/artur/.ssh/id_rsa
+chown artur:artur /home/artur/.ssh/id_rsa*
+chmod 600 /home/artur/.ssh/id_rsa
+chmod 644 /home/artur/.ssh/id_rsa.pub
+passwd artur
+passwd
+
+
+### on WSL ###
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa
+###
+
+vim /etc/ssh/sshd_config
+
+PubkeyAuthentication yes
+AuthorizedKeysFile %h/.ssh/authorized_keys
+PasswordAuthentication no
+
+eix-update
+e-file update
+emerge --update --newuse --deep --with-bdeps=y @world
+
+passwd -dl root
+
+###
+echo -n "password" | cryptsetup open /dev/nvme0n1p3 cryptroot --key-file -
+mount -o subvol=@ /dev/mapper/cryptroot /mnt/gentoo
+mount /dev/nvme0n1p1 /mnt/gentoo/boot/
+mount -o subvol=@home /dev/mapper/cryptroot /mnt/gentoo/home
+mount /dev/nvme0n1p2 /mnt/gentoo/tpm
+mount --types proc /proc /mnt/gentoo/proc
+mount --rbind /sys /mnt/gentoo/sys
+mount --make-rslave /mnt/gentoo/sys
+mount --rbind /dev /mnt/gentoo/dev
+mount --make-rslave /mnt/gentoo/dev
+mount --bind /run /mnt/gentoo/run
+chroot /mnt/gentoo /bin/bash
+
+source /etc/profile
+env-update
+export PS1="(chroot) $PS1"
+clear
+
+efibootmgr -c -d /dev/nvme0n1 -p 1 -L "Gentoo Secure Boot Quiet" -l "\EFI\Linux\gentoo-6.12.0-gentoo.efi" -u "rd.luks.name=92154e07-d962-475c-9777-b66dfda42b32=cryptroot root=/dev/mapper/cryptroot rootflags=subvol=@ init=/lib/systemd/systemd rd.luks.uuid=92154e07-d962-475c-9777-b66dfda42b32 rd.luks.options=discard"
+
+cryptsetup luksOpen /dev/sda3 lukscont --header /mnt/headspace/header.img
+
+doas localectl status
+doas localectl set-locale LANG=pl_PL.UTF-8
+doas localectl set-locale LC_MESSAGES=pl_PL.UTF-8 LC_TIME=pl_PL.UTF-8
+doas localectl status
+
+
