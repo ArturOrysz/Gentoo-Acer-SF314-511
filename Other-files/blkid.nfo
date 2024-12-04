@@ -1,5 +1,0 @@
-/dev/mapper/ventoy: BLOCK_SIZE="2048" UUID="2024-10-23-18-41-32-00" LABEL="Gentoo-amd64-20241020" TYPE="iso9660"
-/dev/mapper/cryptroot: UUID="f513155f-05a7-4029-95cc-7c0596258124" UUID_SUB="ad89ffd3-9b4f-4bd9-836c-d832396bcf42" BLOCK_SIZE="4096" TYPE="btrfs"
-/dev/nvme0n1p3: UUID="a6373853-c657-4cac-9ef6-5dc7e1f68d30" TYPE="crypto_LUKS" PARTUUID="2f23705e-fa45-4b0d-acbd-6afa59ba9c6c"
-/dev/nvme0n1p1: UUID="CC23-3809" BLOCK_SIZE="512" TYPE="vfat" PARTUUID="b87e9ce7-eb7e-4201-a67a-9f85d0652298"
-/dev/nvme0n1p2: UUID="3da89ac0-7042-407b-82ed-f4100cd1e478" BLOCK_SIZE="1024" TYPE="ext4" PARTUUID="dbc24c85-b6b3-4b8d-a701-4d68fdcf2146"

@@ -1,1 +1,0 @@
-cryptroot /dev/nvme0n1p3 none luks

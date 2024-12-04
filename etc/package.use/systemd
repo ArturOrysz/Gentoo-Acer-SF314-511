@@ -1,2 +1,0 @@
-sys-apps/systemd boot ukify cryptsetup tpm secureboot
-sys-apps/systemd-utils kernel-install boot ukify

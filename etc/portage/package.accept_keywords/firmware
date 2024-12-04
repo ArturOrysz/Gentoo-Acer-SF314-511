@@ -1,0 +1,3 @@
+sys-kernel/linux-firmware ~amd64
+sys-firmware/intel-microcode ~amd64
+sys-firmware/sof-firmware ~amd64
